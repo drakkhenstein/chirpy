@@ -15,6 +15,9 @@ func main() {
 		Handler:mux,
 	}
 
+	// register the handler for the root path
+	mux.Handle("/", http.FileServer(http.Dir(".")))
+
 	//use listen and serve to start the server
 	log.Fatal(srv.ListenAndServe())
 }
