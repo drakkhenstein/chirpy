@@ -60,6 +60,7 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 func handlerChirpsValidate(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Body string `json:"body"`
+		Cleaned_Body string `json:"cleaned_body"`
 	}
 	
 	decoder := json.NewDecoder(r.Body)
@@ -80,5 +81,5 @@ func handlerChirpsValidate(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Chirp is too long", nil)
 		return
 	}
-	respondWithJSON(w, http.StatusOK, map[string]bool{"valid": true})
+	respondWithJSON(w, http.StatusOK, map[string]string{"cleaned_body": replaceBadWords(params.Body)})
 }
