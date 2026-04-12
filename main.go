@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync/atomic"
+	"encoding/json"
 )
 
 type apiConfig struct {
@@ -31,6 +32,8 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics) 
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
+	mux.HandleFunc("POST /api/validate_chirp", handlerChirpsValidate)
+
 
 	//use listen and serve to start the server
 	log.Printf("Serving files %s on port %s\n", ".", srv.Addr)
@@ -51,4 +54,31 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 		cfg.fileserverHits.Add(1)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// handlerChirpsValidate is a handler function that validates the request body
+func handlerChirpsValidate(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Body string `json:"body"`
+	}
+	
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	// validate the request body
+	if r.Body == nil {
+		respondWithError(w, http.StatusBadRequest, "Request body is required", nil)
+		return
+	}
+	if len(params.Body) > 140 {
+		respondWithError(w, http.StatusBadRequest, "Chirp is too long", nil)
+		return
+	}
+	respondWithJSON(w, http.StatusOK, map[string]bool{"valid": true})
 }
