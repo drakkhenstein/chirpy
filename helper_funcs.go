@@ -30,6 +30,7 @@ func respondWithJSON(w http.ResponseWriter, statusCode int, payload any) {
 	w.Write(jsonBytes)
 }
 
+
 // bad word list replacement function
 func replaceBadWords(message string) string {
 	// Implementation for replacing bad words

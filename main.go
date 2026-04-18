@@ -66,6 +66,7 @@ func main() {
 	mux.HandleFunc("POST /api/validate_chirp", handlerChirpsValidate)
 	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
 
+	
 
 	//use listen and serve to start the server
 	log.Printf("Serving files %s on port %s\n", ".", srv.Addr)
