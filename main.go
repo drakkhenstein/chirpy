@@ -8,6 +8,8 @@ import (
 	"os"
 	"sync/atomic"
 	"encoding/json"
+	"time"
+	"github.com/google/uuid"
 
 	"github.com/drakkhenstein/chirpy/internal/database"
 	"github.com/joho/godotenv"
@@ -17,6 +19,14 @@ import (
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	db 		   *database.Queries
+	platform string
+}
+
+type User struct {
+	ID uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Email string `json:"email"`
 }
 
 func main() {
@@ -28,11 +38,15 @@ func main() {
 	}
 	defer db.Close()
 	dbQueries := database.New(db)
-	
+
+	//reading the PLATFORM .env into apicfg for use in the handler functions
+	platform := os.Getenv("PLATFORM")
+
 	// server hits counter
 	apiCfg := &apiConfig{
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
+		platform:       platform,
 	}
 
 	// create a new http.ServeMux
@@ -50,6 +64,7 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics) 
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 	mux.HandleFunc("POST /api/validate_chirp", handlerChirpsValidate)
+	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
 
 
 	//use listen and serve to start the server
@@ -99,4 +114,37 @@ func handlerChirpsValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondWithJSON(w, http.StatusOK, map[string]string{"cleaned_body": replaceBadWords(params.Body)})
+}
+
+//create a handler function that creates a new user
+func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email string `json:"email"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error decoding parameters: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	if params.Email == "" {
+		respondWithError(w, http.StatusBadRequest, "Email is required", nil)
+		return
+	}
+	user, err := cfg.db.CreateUser(r.Context(), params.Email)
+	if err != nil {
+		log.Printf("Error creating user: %s", err)
+		w.WriteHeader(500)
+		return
+	}
+	
+	respUser := User{
+		ID:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
+	}
+	respondWithJSON(w, http.StatusCreated, respUser)
 }

@@ -19,7 +19,7 @@ func respondWithError(w http.ResponseWriter, statusCode int, message string, err
 }
 
 // responds with clean body code from bad words and a success message
-func respondWithJSON(w http.ResponseWriter, statusCode int, payload map[string]string) {
+func respondWithJSON(w http.ResponseWriter, statusCode int, payload any) {
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(statusCode)
 	jsonBytes, err := json.Marshal(payload)
