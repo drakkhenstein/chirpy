@@ -29,6 +29,14 @@ type User struct {
 	Email string `json:"email"`
 }
 
+type Chirp struct {
+	ID uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	UserID uuid.UUID `json:"user_id"`
+	Body string `json:"body"`
+}
+
 func main() {
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
@@ -63,8 +71,8 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics) 
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
-	mux.HandleFunc("POST /api/validate_chirp", handlerChirpsValidate)
 	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
+	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
 
 	
 
@@ -89,32 +97,55 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	})
 }
 
-// handlerChirpsValidate is a handler function that validates the request body
-func handlerChirpsValidate(w http.ResponseWriter, r *http.Request) {
+// handlerCreateChirp is a handler function that creates a new chirp
+func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Body string `json:"body"`
-		Cleaned_Body string `json:"cleaned_body"`
+		UserID uuid.UUID `json:"user_id"`
 	}
-	
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		log.Printf("Error decoding parameters: %s", err)
-		w.WriteHeader(500)
+		respondWithError(w, http.StatusInternalServerError, "Error decoding parameters", err)
 		return
 	}
+	if params.Body == "" {
+		respondWithError(w, http.StatusBadRequest, "Body is required", nil)
+		return
+	}
+	if params.UserID == uuid.Nil {
+		respondWithError(w, http.StatusBadRequest, "UserID is required", nil)
+		return
+	}
+	cleanedBody, err := validateChirp(params.Body)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+	chirp, err := cfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
+		Body: cleanedBody,
+		UserID: params.UserID,
+	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error creating chirp", err)
+		return
+	}
+	respondWithJSON(w, http.StatusCreated, Chirp{
+		ID: chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body: chirp.Body,
+		UserID: chirp.UserID,
+	})
+}
 
-	// validate the request body
-	if r.Body == nil {
-		respondWithError(w, http.StatusBadRequest, "Request body is required", nil)
-		return
+func validateChirp(body string) (string, error) {
+	const maxChirpLength = 140
+	if len(body) > maxChirpLength {
+		return "", fmt.Errorf("chirp is too long")
 	}
-	if len(params.Body) > 140 {
-		respondWithError(w, http.StatusBadRequest, "Chirp is too long", nil)
-		return
-	}
-	respondWithJSON(w, http.StatusOK, map[string]string{"cleaned_body": replaceBadWords(params.Body)})
+	return replaceBadWords(body), nil
 }
 
 //create a handler function that creates a new user
