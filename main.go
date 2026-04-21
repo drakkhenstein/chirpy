@@ -73,6 +73,7 @@ func main() {
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
 
 	
 
@@ -148,7 +149,27 @@ func validateChirp(body string) (string, error) {
 	return replaceBadWords(body), nil
 }
 
-//create a handler function that creates a new user
+// handlerGetChirps is a handler function that retrieves all chirps
+func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
+	dbChirps, err := cfg.db.GetChirps(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error retrieving chirps", err)
+		return
+	}
+	respChirps := []Chirp{}
+	for _, dbChirp := range dbChirps {
+		respChirps = append(respChirps, Chirp{
+			ID: dbChirp.ID,
+			CreatedAt: dbChirp.CreatedAt,
+			UpdatedAt: dbChirp.UpdatedAt,
+			UserID: dbChirp.UserID,
+			Body: dbChirp.Body,
+		})
+	}
+	respondWithJSON(w, http.StatusOK, respChirps)
+}
+
+//a handler function that creates a new user
 func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Email string `json:"email"`
