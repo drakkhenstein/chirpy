@@ -74,6 +74,7 @@ func main() {
 	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirpByID)
 
 	
 
@@ -167,6 +168,33 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	respondWithJSON(w, http.StatusOK, respChirps)
+}
+
+// handlerGetChirpByID is a handler function that retrieves a chirp by its ID
+func (cfg *apiConfig) handlerGetChirpByID(w http.ResponseWriter, r *http.Request) {
+	chirpIDStr := r.PathValue("chirpID")
+	chirpID, err := uuid.Parse(chirpIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid chirp ID", err)
+		return
+	}
+	dbChirp, err := cfg.db.GetChirpByID(r.Context(), chirpID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithError(w, http.StatusNotFound, "Chirp not found", nil)
+			return
+		}
+		respondWithError(w, http.StatusInternalServerError, "Error retrieving chirp", err)
+		return
+	}
+	respChirp := Chirp{
+		ID: dbChirp.ID,
+		CreatedAt: dbChirp.CreatedAt,
+		UpdatedAt: dbChirp.UpdatedAt,
+		UserID: dbChirp.UserID,
+		Body: dbChirp.Body,
+	}
+	respondWithJSON(w, http.StatusOK, respChirp)
 }
 
 //a handler function that creates a new user
