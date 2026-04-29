@@ -1,6 +1,7 @@
 package main
 
 import (
+	"time"
 	"encoding/json"
 	"net/http"
 	"github.com/drakkhenstein/chirpy/internal/auth"
@@ -10,6 +11,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Email string `json:"email"`
 		Password string `json:"password"`
+		ExpiresInSeconds int `json:"expires_in_seconds"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
@@ -26,6 +28,9 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Password is required", nil)
 		return
 	}
+	if params.ExpiresInSeconds <= 0 || params.ExpiresInSeconds > 3600 {
+		params.ExpiresInSeconds = 3600 // Default to 1 hour
+	}
 	user, err := cfg.db.GetUserByEmail(r.Context(), params.Email)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password", nil)
@@ -36,11 +41,22 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password", nil)
 		return
 	}
-	respUser := User{
+	token, err := auth.MakeJWT(user.ID, cfg.jwtSecret, time.Duration(params.ExpiresInSeconds)*time.Second)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error creating JWT", err)
+		return
+	}
+	type response struct {
+		User
+		Token string `json:"token"`
+	}
+	respondWithJSON(w, http.StatusOK, response{
+	User : User{
 		ID:        user.ID,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email:     user.Email,
-	}
-	respondWithJSON(w, http.StatusOK, respUser)
+	},
+	Token: token,
+	})
 }

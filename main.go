@@ -21,6 +21,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	db 		   *database.Queries
 	platform string
+	jwtSecret string
 }
 
 type User struct {
@@ -56,6 +57,10 @@ func main() {
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
 		platform:       platform,
+		jwtSecret:      os.Getenv("JWT_SECRET"),
+	}
+	if apiCfg.jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is required")
 	}
 
 	// create a new http.ServeMux
@@ -105,21 +110,26 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Body string `json:"body"`
-		UserID uuid.UUID `json:"user_id"`
+	}
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Authorization header missing", err)
+		return
+	}
+	userID, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid token", err)
+		return
 	}
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error decoding parameters", err)
 		return
 	}
 	if params.Body == "" {
 		respondWithError(w, http.StatusBadRequest, "Body is required", nil)
-		return
-	}
-	if params.UserID == uuid.Nil {
-		respondWithError(w, http.StatusBadRequest, "UserID is required", nil)
 		return
 	}
 	cleanedBody, err := validateChirp(params.Body)
@@ -129,7 +139,7 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 	}
 	chirp, err := cfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
 		Body: cleanedBody,
-		UserID: params.UserID,
+		UserID: userID,
 	})
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error creating chirp", err)

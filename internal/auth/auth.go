@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"net/http"
+	"strings"
 	"errors"
 	"time"
 
@@ -51,4 +53,23 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	} else {
 		return uuid.Nil, errors.New("invalid token")
 	}
+}
+
+func GetBearerToken(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("authorization header missing")
+	}
+
+	const prefix = "Bearer "
+	if len(authHeader) <= len(prefix) || authHeader[:len(prefix)] != prefix {
+		return "", errors.New("invalid authorization header format")
+	}
+
+	withoutPrefix := strings.TrimPrefix(authHeader, prefix)
+	clean := strings.TrimSpace(withoutPrefix)
+	if clean == "" {
+		return "", errors.New("token is empty")
+	}
+	return clean, nil
 }
