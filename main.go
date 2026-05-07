@@ -29,6 +29,7 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email string `json:"email"`
+	IsChirpyRed bool `json:"is_chirpy_red"`
 }
 
 type Chirp struct {
@@ -86,6 +87,7 @@ func main() {
 	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevokeRefreshToken)
 	mux.HandleFunc("PUT /api/users", apiCfg.handlerUpdateUser)
 	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handlerDeleteChirp)
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerWebhook)
 
 	
 
@@ -252,6 +254,7 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) 
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email:     user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	}
 	respondWithJSON(w, http.StatusCreated, respUser)
 }
@@ -344,6 +347,7 @@ func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) 
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email:     user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	}
 	respondWithJSON(w, http.StatusOK, respUser)
 }
@@ -388,4 +392,34 @@ func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(204)
+}
+
+func (cfg *apiConfig) handlerWebhook(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Event string `json:"event"`
+		Data struct {
+			UserID uuid.UUID `json:"user_id"`
+		}
+	}
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error decoding parameters", err)
+		return
+	}
+	if params.Event != "user.upgraded" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	_, err = cfg.db.UpgradeToChirpyRed(r.Context(), params.Data.UserID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithError(w, http.StatusNotFound, "Couldn't find user", nil)
+			return
+		}
+		respondWithError(w, http.StatusInternalServerError, "Couldn't update user", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
