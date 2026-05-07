@@ -394,6 +394,7 @@ func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(204)
 }
 
+// handlerWebhook is a handler function that handles webhooks from Polka and upgrades users to Chirpy Red when they upgrade on Polka
 func (cfg *apiConfig) handlerWebhook(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Event string `json:"event"`
