@@ -22,6 +22,7 @@ type apiConfig struct {
 	db 		   *database.Queries
 	platform string
 	jwtSecret string
+	polkaKey string
 }
 
 type User struct {
@@ -59,9 +60,13 @@ func main() {
 		db:             dbQueries,
 		platform:       platform,
 		jwtSecret:      os.Getenv("JWT_SECRET"),
+		polkaKey:       os.Getenv("POLKA_KEY"),
 	}
 	if apiCfg.jwtSecret == "" {
 		log.Fatal("JWT_SECRET environment variable is required")
+	}
+	if apiCfg.polkaKey == "" {
+		log.Fatal("POLKA_KEY environment variable is required")
 	}
 
 	// create a new http.ServeMux
@@ -402,13 +407,25 @@ func (cfg *apiConfig) handlerWebhook(w http.ResponseWriter, r *http.Request) {
 			UserID uuid.UUID `json:"user_id"`
 		}
 	}
+
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		w.WriteHeader(401)
+		return
+	}
+	if apiKey != cfg.polkaKey {
+		w.WriteHeader(401)
+		return
+	}
+
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error decoding parameters", err)
 		return
 	}
+	
 	if params.Event != "user.upgraded" {
 		w.WriteHeader(http.StatusNoContent)
 		return
