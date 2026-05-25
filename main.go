@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"time"
 	"github.com/google/uuid"
+	"sort"
 
 	"github.com/drakkhenstein/chirpy/internal/database"
 	"github.com/drakkhenstein/chirpy/internal/auth"
@@ -206,6 +207,7 @@ func authorIDFromRequest(r *http.Request) (uuid.UUID, error) {
 	return authorID, nil
 }
 
+//handler to get chirps sorted
 func (cfg *apiConfig) handlerChirpsRetrieve(w http.ResponseWriter, r *http.Request) {
 	authorID, err := authorIDFromRequest(r)
 	if err != nil {
@@ -224,6 +226,21 @@ func (cfg *apiConfig) handlerChirpsRetrieve(w http.ResponseWriter, r *http.Reque
 		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirps", err)
 		return
 	}
+	sortDirection := r.URL.Query().Get("sort")
+	if sortDirection == "" {
+		sortDirection = "asc"
+	}
+	if sortDirection != "asc" && sortDirection != "desc" {
+		respondWithError(w, http.StatusBadRequest, "Invalid sort direction", nil)
+		return
+	}
+	sort.Slice(dbChirps, func(i, j int) bool {
+		if sortDirection == "asc" {
+			return dbChirps[i].CreatedAt.Before(dbChirps[j].CreatedAt)
+		}
+		return dbChirps[i].CreatedAt.After(dbChirps[j].CreatedAt)
+	})
+
 	respChirps := []Chirp{}
 	for _, dbChirp := range dbChirps {
 		respChirps = append(respChirps, Chirp{
